@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vote on Places</title>
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600&family=Gabarito:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F3F5F1;--surface:#FFFFFF;--text:#1B2421;--muted:#53605A;--accent:#17705F;--button:#17705F;--on-button:#FFFFFF;--border:#DCE3DC}
+@media (prefers-color-scheme: dark){:root{--bg:#121715;--surface:#1D2421;--text:#EDF2EE;--muted:#A2AEA8;--accent:#6FD3BC;--button:#1A7D6A;--on-button:#FFFFFF;--border:#2D3632}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.55 Figtree,system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:48px 20px 64px}
+h1{font-family:Gabarito,system-ui,sans-serif;font-weight:800;font-size:40px;line-height:1.1;margin:20px 0 8px}
+h2{font-family:Gabarito,system-ui,sans-serif;font-weight:700;font-size:22px;margin:32px 0 6px}
+p{margin:0 0 12px}
+.muted{color:var(--muted)}
+a{color:var(--accent)}
+.button{display:inline-block;margin:20px 0 8px;padding:14px 26px;border-radius:999px;background:var(--button);color:var(--on-button);font-weight:600;text-decoration:none}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:20px;margin-top:24px}
+footer{margin-top:48px;font-size:15px}
+</style>
+
+</head>
+<body>
+<main>
+<svg viewBox="0 0 100 100" width="72" height="72" role="img" aria-label="Places icon" style="border-radius:22%;display:block"><rect width="100" height="100" fill="#17705F"/><path d="M50 84 C44 76 27 60 27 44 A23 23 0 1 1 73 44 C73 60 56 76 50 84 Z" fill="#F3F5F1"/><path d="M42 31 H58 V56 L50 50 L42 56 Z" fill="#D0572C"/></svg>
+<p class="muted" id="from"></p>
+<h1 id="q">Loading the vote…</h1>
+<p class="muted" id="sub"></p>
+<div id="options"></div>
+<div id="form" hidden>
+<label for="name" class="muted" style="display:block;margin-top:20px">Your first name (so friends know who picked what)</label>
+<input id="name" maxlength="40" autocomplete="given-name" style="width:100%;margin-top:6px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit">
+<button class="button" id="send" style="border:0;cursor:pointer;font:inherit;font-weight:600">Vote</button>
+<p class="muted" id="msg"></p>
+</div>
+<div class="card"><p class="muted" style="margin:0">Places is an iPhone app for saving places you want to go. It’s in early testing.</p></div>
+<style>
+.opt{display:flex;gap:12px;align-items:center;width:100%;text-align:left;margin:10px 0;padding:14px;border-radius:16px;border:2px solid var(--border);background:var(--surface);color:var(--text);font:inherit;cursor:pointer}
+.opt.on{border-color:var(--accent)}
+.opt[disabled]{cursor:default}
+.opt .main{flex:1;min-width:0}
+.opt .name{font-family:Gabarito,system-ui,sans-serif;font-weight:700;font-size:19px}
+.opt .bar{height:8px;border-radius:4px;background:var(--border);margin-top:8px;overflow:hidden}
+.opt .bar i{display:block;height:8px;background:var(--accent);border-radius:4px}
+.opt .count{font-weight:700;color:var(--accent);font-size:18px}
+.opt .tick{width:26px;height:26px;border-radius:50%;border:2px solid var(--muted);flex:none}
+.opt.on .tick{background:var(--accent);border-color:var(--accent)}
+.opt .who,.opt .map{font-size:14px}
+</style>
+<script>
+(function () {
+  var URL_ = "https://vqrsmvddvvmbywawawsu.supabase.co", KEY = "sb_publishable_KRrYIobbhzFrMVxOsVX5mQ_asq2XcZH";
+  var id = new URLSearchParams(location.search).get('v') || '';
+  var $ = function (s) { return document.getElementById(s); };
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) { $('q').textContent = 'This vote link isn’t complete'; return; }
+  var voter = '';
+  try { voter = localStorage.getItem('places-voter') || ''; } catch (e) {}
+  if (!/^[A-Za-z0-9-]{16,64}$/.test(voter)) {
+    voter = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(36).slice(2, 12));
+    try { localStorage.setItem('places-voter', voter); } catch (e) {}
+  }
+  try { $('name').value = localStorage.getItem('places-voter-name') || ''; } catch (e) {}
+  var view = null, picks = null;
+  function rpc(fn, body) {
+    return fetch(URL_ + '/rest/v1/rpc/' + fn, {
+      method: 'POST',
+      headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d && d.message || 'error'); return d; }); });
+  }
+  function mapLink(o) {
+    var u = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.name);
+    if (o.google_place_id) u += '&query_place_id=' + encodeURIComponent(o.google_place_id);
+    return u;
+  }
+  function render() {
+    if (!view) { $('q').textContent = 'This vote has ended'; $('sub').textContent = 'Whoever started it has closed it.'; $('options').innerHTML = ''; $('form').hidden = true; return; }
+    $('from').textContent = 'From the list “' + view.list_name + '”';
+    $('q').textContent = view.question;
+    var mine = picks || view.options.filter(function (o) { return o.mine; }).map(function (o) { return o.id; });
+    var top = Math.max.apply(null, [1].concat(view.options.map(function (o) { return o.votes; })));
+    $('sub').textContent = view.closed ? 'Voting has ended. Here’s how it went.' :
+      (view.voters ? view.voters + (view.voters === 1 ? ' person has' : ' people have') + ' voted. ' : '') + 'Tap every place you’d be happy with.';
+    var box = $('options'); box.innerHTML = '';
+    view.options.forEach(function (o) {
+      var on = mine.indexOf(o.id) >= 0;
+      var b = document.createElement('button');
+      b.className = 'opt' + (on ? ' on' : ''); b.disabled = view.closed;
+      b.setAttribute('role', 'checkbox'); b.setAttribute('aria-checked', on ? 'true' : 'false');
+      var main = document.createElement('span'); main.className = 'main';
+      var n = document.createElement('div'); n.className = 'name'; n.textContent = o.name; main.appendChild(n);
+      var bar = document.createElement('div'); bar.className = 'bar'; var i = document.createElement('i'); i.style.width = (o.votes / top * 100) + '%'; bar.appendChild(i); main.appendChild(bar);
+      if (o.names.length) { var w = document.createElement('div'); w.className = 'who muted'; w.textContent = o.names.join(', '); main.appendChild(w); }
+      var a = document.createElement('a'); a.className = 'map'; a.href = mapLink(o); a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'See it on Google Maps';
+      a.addEventListener('click', function (e) { e.stopPropagation(); }); main.appendChild(a);
+      var c = document.createElement('span'); c.className = 'count'; c.textContent = o.votes;
+      b.appendChild(main); b.appendChild(c);
+      if (!view.closed) { var t = document.createElement('span'); t.className = 'tick'; b.appendChild(t); }
+      b.addEventListener('click', function () {
+        picks = on ? mine.filter(function (x) { return x !== o.id; }) : mine.concat([o.id]);
+        render();
+      });
+      box.appendChild(b);
+    });
+    $('form').hidden = view.closed;
+    $('send').textContent = picks === null ? (mine.length ? 'Update my vote' : 'Vote') : (mine.length ? 'Save my vote' : 'Take my vote back');
+  }
+  function load() {
+    return rpc('poll_view', { p_poll: id, p_voter: voter }).then(function (d) { view = d; render(); })
+      .catch(function () { $('q').textContent = 'Couldn’t load the vote'; $('sub').textContent = 'Check your connection and reload the page.'; });
+  }
+  $('send').addEventListener('click', function () {
+    var mine = picks || view.options.filter(function (o) { return o.mine; }).map(function (o) { return o.id; });
+    var name = $('name').value.trim().slice(0, 40);
+    try { localStorage.setItem('places-voter-name', name); } catch (e) {}
+    $('send').disabled = true; $('msg').textContent = '';
+    rpc('poll_vote', { p_poll: id, p_voter: voter, p_name: name || null, p_options: mine })
+      .then(function (d) { view = d; picks = null; render(); $('msg').textContent = mine.length ? 'Thanks! Your vote is in.' : 'Your vote is taken back.'; })
+      .catch(function (e) { $('msg').textContent = /closed/.test(e.message) ? 'This vote has ended.' : /full/.test(e.message) ? 'This vote is full.' : 'Couldn’t save your vote. Try again.'; })
+      .then(function () { $('send').disabled = false; });
+  });
+  load();
+})();
+</script>
+<footer class="muted"><a href="/places/">Places</a> · <a href="/places/privacy/">Privacy policy</a></footer>
+</main>
+</body>
+</html>
